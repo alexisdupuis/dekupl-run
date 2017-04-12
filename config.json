@@ -20,16 +20,16 @@
   },
 
   "samples": [{
-      "name": "sample1",
+      "name" : "31868_chrY",
       "condition": "A"
     }, {
-      "name" : "sample2",
+      "name" : "31918_chrY",
       "condition" : "A" 
     }, {
-      "name" : "sample3",
+      "name" : "10933_chrY",
       "condition" : "B" 
     }, {
-      "name" : "sample4",
+      "name" : "10942_chrY",
       "condition" : "B" 
     }
   ]

@@ -1,0 +1,21 @@
+# Ignore the gzip archives, the object files
+*.gz
+*.o
+
+# Ignore the results of dekupl-run and the temporary directory used 
+# during the execution of dekupl-run
+DEkupl_result/
+temporary/
+
+# Ignore the data directory
+data/
+
+# Ignore the bin directory
+bin/
+
+# Ignores the share directory
+share/
+
+
+
+raw_pvals.txt

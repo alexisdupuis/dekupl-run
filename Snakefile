@@ -166,14 +166,14 @@ rule sample_conditions_full:
 ##############################################################################
 
 # STEP 1: DIFFERENTIAL GENE EXPRESSION
-#         Download kallisto, and quantify gene expression for aLogsll
+#         Download kallisto, and quantify gene expression for all
 #         the samples
 
 # 1.3 Generic rule to quantify a sample with kallisto
 rule kallito_quantif:
   input:
-    r1 = FASTQ_DIR + "/{sample}_1.fastq.gz",
-    r2 = FASTQ_DIR + "/{sample}_2.fastq.gz",
+    r1 = FASTQ_DIR + "/{sample}.fastq.gz",
+    # r2 = FASTQ_DIR + "/{sample}_2.fastq.gz",
     index = KALLISTO_INDEX
   output:
     KALLISTO_DIR + "/{sample}"
@@ -184,12 +184,14 @@ rule kallito_quantif:
          echo -e \"******\" >{log}
          echo -e \"start of rule kallito_quantif : $(date)\n\" >>{log} 
 
-         {KALLISTO} quant -i {input.index} -o {output} {input.r1} {input.r2} 2>>{log}
+         {KALLISTO} quant -i {input.index} -o {output} --single -l 200 -s 20 {input.r1} 2>>{log}
 
          echo -e \"\nend of rule kallito_quantif : $(date)\n\" >>{log} 
          echo -e \"******\" >>{log}
 
          """
+
+# suppression d'un fastq en paramètres
 
 # 1.4 Merge all transcripts counts from kallisto abundance files
 rule transcript_counts:
@@ -271,7 +273,8 @@ rule differential_gene_expression:
     # Load counts data
     countsData = read.table("{input.gene_counts}",
                             header=T,
-                            row.names=1)
+                            row.names=1,
+                            check.names=F)
 
     # Load col data with sample specifications
     colData = read.table("{input.sample_conditions}",
@@ -282,6 +285,7 @@ rule differential_gene_expression:
     write(rownames(colData),stderr())
 
     colData = colData[colnames(countsData),,drop=FALSE]
+
 
     # Create DESeq2 object
     dds <- DESeqDataSetFromMatrix(countData=countsData,
@@ -338,15 +342,19 @@ rule differential_gene_expression:
 
     """)
 
+# colData = colData[colnames(countsData),,drop=FALSE] : quel rôle ?
+
 ###############################################################################
 #
 # STEP 2: KMER COUNTS
 #         Compiple DEkupl counter and count k-mers on all the samples
 #
+
+# compte les k-mers de chaque échantillon
 rule jellyfish_count:
   input: 
-    r1 = FASTQ_DIR  + "/{sample}_1.fastq.gz", 
-    r2 = FASTQ_DIR  + "/{sample}_2.fastq.gz"
+    r1 = FASTQ_DIR  + "/{sample}.fastq.gz", 
+    # r2 = FASTQ_DIR  + "/{sample}_2.fastq.gz"
   output: COUNTS_DIR + "/{sample}.jf"
   log: 
     exec_time = LOGS + "/{sample}_jellyfishRawCounts_exec_time.log"
@@ -360,12 +368,17 @@ rule jellyfish_count:
       echo -e \"start of rule jellyfish_count (raw counts) : $(date)\n\" >>{log.exec_time}
       echo -e \"R1 is rev comp\n\" >>{log.exec_time}
       
-      {JELLYFISH_COUNT} -L 2 -m {config[kmer_length]} -s 10000 -t {threads} -o {output} -F 2 <(zcat {input.r1} | {REVCOMP}) <(zcat {input.r2})
+      {JELLYFISH_COUNT} -L 2 -m {config[kmer_length]} -s 10000 -t {threads} -o {output} -F 2 <(zcat {input.r1})
       
       echo -e \"\nend of rule jellyfish_count : $(date)\n\" >>{log.exec_time} 
       echo -e \"******\" >>{log.exec_time}
       
       """)
+
+# suppression d'un fichier fasta en paramètres
+
+# <(zcat {input.r1} | {REVCOMP}) < <(zcat {input.r2})
+
     elif LIB_TYPE == "fr":
       shell("""
       
@@ -382,6 +395,7 @@ rule jellyfish_count:
     else:
       sys.exit('Unknown library type')
 
+# convertit le résultat de jellyfish_count en un fichier txt, tri les k-mers et compresse ce fichier txt
 rule jellyfish_dump:
   input: COUNTS_DIR + "/{sample}.jf"
   output: COUNTS_DIR + "/{sample}.txt.gz"
@@ -401,6 +415,7 @@ rule jellyfish_dump:
 
          """
 
+# fusionne tous les fichiers txt compressés correspondant aux résultats de jellyfish_dump pour chaque échantillon en un fichier tsv compressé
 rule join_counts:
   input: 
     fastq_files = expand("{counts_dir}/{sample}.txt.gz",counts_dir=COUNTS_DIR,sample=SAMPLE_NAMES),
@@ -454,12 +469,13 @@ rule gencode_dump:
          echo -e \"start of gencode_dump : $(date)\n\" >>{log.exec_time}
 
 
-        {JELLYFISH_DUMP} -c {input} | sort -k 1 -S {resources.ram}G --parallel {threads}| pigz -p {threads} -c > {output}
+        {JELLYFISH_DUMP} -c {input} | sort -k 1 -S {resources.ram}G --parallel {threads} -T "./temporary" | pigz -p {threads} -c > {output}
 
         echo -e \"\nend of rule gencode_dump : $(date)\n\" >>{log.exec_time} 
         echo -e \"******\" >>{log.exec_time}
 
         """
+# ajout de l'option -T à 'sort', le répertoire par défaut /tmp n'étant pas suffisant pour exécuter l'intégralité du tri.
 
 # 3.3 Filter counter k-mer that are present in the gencode set
 rule filter_gencode_counts:
