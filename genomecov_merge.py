@@ -40,6 +40,7 @@ def genomecov_merge(filename, resultsFilename, n):
     resultsFile.close()
 
 
+"""
 def genomecov_merge_bedgraph(filename, resultsFilename, n):
     nbLines = int(n)
     resultsFile = open(resultsFilename, 'w')
@@ -68,16 +69,8 @@ def genomecov_merge_bedgraph(filename, resultsFilename, n):
                 depthMean = depthMean / (i-2)
             resultsFile.write(linesList[0][0] + " " + locusmin + " " + locusmax + " " + str(round(depthMean)) + '\n')
     resultsFile.close()
-
-
-def main():
-    if (sys.argv[1] == "per-base"):
-        genomecov_merge(sys.argv[2], sys.argv[3], sys.argv[4])
-    elif (sys.argv[1] == "bedgraph"):
-        genomecov_merge_bedgraph(sys.argv[2], sys.argv[3], sys.argv[4])
-    else:
-        print("Error : first argument must be per-base or bedgraph.")
+"""
 
 
 if __name__ == "__main__":
-    main()
+    genomecov_merge(sys.argv[1], sys.argv[2], sys.argv[3])

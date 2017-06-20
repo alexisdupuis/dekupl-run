@@ -284,14 +284,14 @@ def kmer_counts(kmer, countsFile, filename, cpt):
     with open(countsFile, 'r') as cFile:
         headerLine = cFile.readline()
         if (cpt == 0):
-            resultsFile.write(headerLine)
+            resultsFile.write("orientation\t" + headerLine)
         for line in cFile:
             splitLine = line.split('\t')
             if (kmer == splitLine[0]):
-                resultsFile.write("F "+ line)
+                resultsFile.write("forward\t"+ line)
                 # break
             if (revcompResult == splitLine[0]):
-                resultsFile.write("R "+ line)
+                resultsFile.write("reverse\t" + line)
                 # break
             else:
                 continue
@@ -327,6 +327,15 @@ def ratios(contig, phenotype):
         print([round(((zHealthy/len(splitCounts)) * 100), 2), round(((sHealthy/len(splitCounts)) * 100), 2), round(((zSick/len(splitCounts)) * 100), 2), round(((sSick/len(splitCounts)) * 100), 2)])
 
 
+def below_nb_kmers(nb_kmers):
+    nbKmers = int(nb_kmers)
+    with open("total_kmers_with_conditions.txt", 'r') as totalKmersFile:
+        for line in totalKmersFile:
+            splitLine = line.split()
+            if (int(splitLine[2]) < nbKmers and splitLine[3] == "1"):
+                print(splitLine[3])
+
+
 def main():
     # for i in range(1, 339):
     #     total_kmers(i, sys.argv[1])
@@ -357,6 +366,8 @@ def main():
         kmer_counts(sys.argv[2], sys.argv[3])
     elif (sys.argv[1] == "ratios"):
         ratios(sys.argv[2], sys.argv[3])
+    elif (sys.argv[1] == "below-nb-kmers"):
+        below_nb_kmers(sys.argv[2])
     else:
         print("This function doesn't exist.")
 

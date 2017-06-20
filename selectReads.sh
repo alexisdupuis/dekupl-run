@@ -18,6 +18,8 @@ then
     exit 1
 fi
 
+# Checks if the directory chr21_bam/ already exists, otherwise creates it.
+
 ls chr21_bam > /dev/null 2>&1
 if [ $? -ne 0 ]
 then
@@ -31,6 +33,7 @@ do
     name=`basename $bam '.sorted.dup.recal.bam'`
     bamFile=./chr21_bam/$name-chr21.bam
     ls $bamFile > /dev/null 2>&1
+    # Skip the creation of the file if it already exists.
     if [ $? -eq 0 ]
     then
         continue
@@ -42,8 +45,6 @@ do
 done
 
 exit 0
-
-# bamFileBis=./chrY_ttty14-alignment/$name-ttty14-37alignment.bam
 
 # alignement sur gène TTTY14 GRCh38
 # samtools view -b $1 Y:18872501-19077416 | samtools sort > $bamFile

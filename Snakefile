@@ -99,7 +99,7 @@ rule compile_TtestFilter:
     shell("ln -s -f ../share/TtestFilter/TtestFilter bin/")
 
 rule download_kallisto:
-  output: 
+  output:
     kallisto_symlink = KALLISTO,
     kallisto_tarball = temp("share/kallisto.tar.gz")
   run:
@@ -128,10 +128,10 @@ rule genome_download:
 #
 # Create a Kallisto index of the reference transrciptome
 rule kallisto_index:
-  input: 
+  input:
     transcripts   = GENCODE_FASTA,
     kallisto_bin  = KALLISTO
-  output: 
+  output:
     KALLISTO_INDEX
   shell: "{KALLISTO} index -i {output} {input.transcripts}"
 
@@ -155,7 +155,7 @@ rule sample_conditions:
         f.write("\t".join([sample["name"],sample[CONDITION_COL]]) + "\n")
 
 rule sample_conditions_full:
-  output: 
+  output:
     SAMPLE_CONDITIONS_FULL
   input:
     sample_conditions     = SAMPLE_CONDITIONS,
@@ -166,14 +166,14 @@ rule sample_conditions_full:
 ##############################################################################
 
 # STEP 1: DIFFERENTIAL GENE EXPRESSION
-#         Download kallisto, and quantify gene expression for all
+#         Download kallisto, and quantify gene expression for aLogsll
 #         the samples
 
 # 1.3 Generic rule to quantify a sample with kallisto
 rule kallito_quantif:
   input:
-    r1 = FASTQ_DIR + "/{sample}.fastq.gz",
-    # r2 = FASTQ_DIR + "/{sample}_2.fastq.gz",
+    r1 = FASTQ_DIR + "/{sample}_1.fastq.gz",
+    r2 = FASTQ_DIR + "/{sample}_2.fastq.gz",
     index = KALLISTO_INDEX
   output:
     KALLISTO_DIR + "/{sample}"
@@ -182,24 +182,22 @@ rule kallito_quantif:
   shell: """
 
          echo -e \"******\" >{log}
-         echo -e \"start of rule kallito_quantif : $(date)\n\" >>{log} 
+         echo -e \"start of rule kallito_quantif : $(date)\n\" >>{log}
 
-         {KALLISTO} quant -i {input.index} -o {output} --single -l 200 -s 20 {input.r1} 2>>{log}
+         {KALLISTO} quant -i {input.index} -o {output} {input.r1} {input.r2} 2>>{log}
 
-         echo -e \"\nend of rule kallito_quantif : $(date)\n\" >>{log} 
+         echo -e \"\nend of rule kallito_quantif : $(date)\n\" >>{log}
          echo -e \"******\" >>{log}
 
          """
 
-# suppression d'un fastq en paramètres
-
 # 1.4 Merge all transcripts counts from kallisto abundance files
 rule transcript_counts:
-  input: 
+  input:
     kallisto_outputs  = expand("{kallisto_dir}/{sample}", sample = SAMPLE_NAMES, kallisto_dir = KALLISTO_DIR)
   output:
     TRANSCRIPT_COUNTS
-  run: 
+  run:
     extracted_counts  = expand("<(echo -e 'feature\t{sample}' && tail -n+2 {kallisto_dir}/{sample}/abundance.tsv | cut -f1,4)", sample = SAMPLE_NAMES, kallisto_dir = KALLISTO_DIR)
     shell("{MERGE_COUNTS} {extracted_counts} | gzip -c > {output}")
 
@@ -208,7 +206,7 @@ rule transcript_to_gene_mapping:
   input: GENCODE_FASTA
   output: TRANSCRIPT_TO_GENE_MAPPING
   run:
-    mapping = open(output[0], 'w') 
+    mapping = open(output[0], 'w')
     with gzip.open(input[0], 'rt') as f:
       for line in f:
         if line[0] == ">":
@@ -217,7 +215,7 @@ rule transcript_to_gene_mapping:
 
 # 1.6 Convert transcript counts to gene counts
 rule gene_counts:
-  input: 
+  input:
     transcript_counts = TRANSCRIPT_COUNTS,
     transcript_to_gene_mapping = TRANSCRIPT_TO_GENE_MAPPING
   output:
@@ -263,7 +261,7 @@ rule differential_gene_expression:
   log : LOGS + "/DESeq2_diff_gene_exp.log"
   run:
     R("""
-    library(DESeq2) 
+    library(DESeq2)
     library(RColorBrewer)
     library(pheatmap)
     library(ggplot2)
@@ -273,35 +271,33 @@ rule differential_gene_expression:
     # Load counts data
     countsData = read.table("{input.gene_counts}",
                             header=T,
-                            row.names=1,
-                            check.names=F)
+                            row.names=1)
 
     # Load col data with sample specifications
     colData = read.table("{input.sample_conditions}",
                          header=T,
                          row.names=1)
-    
+
     write(colnames(countsData),stderr())
     write(rownames(colData),stderr())
 
     colData = colData[colnames(countsData),,drop=FALSE]
-
 
     # Create DESeq2 object
     dds <- DESeqDataSetFromMatrix(countData=countsData,
                                   colData=colData,
                                   design = ~ {CONDITION_COL})
     dds <- DESeq(dds)
-    
-    #normalized counts 
+
+    #normalized counts
     NormCount<- as.data.frame(counts(dds, normalized=TRUE ))
-  
+
     #writing in a file normalized counts
     normalized_counts<-data.frame(id=row.names(NormCount),NormCount,row.names=NULL)
     write.table(normalized_counts,file="{output.norm_counts}", sep="\t",row.names=F, col.names=T, quote=F)
 
     # Write normalization factors
-    size_factors = data.frame(sample = names(sizeFactors(dds)), 
+    size_factors = data.frame(sample = names(sizeFactors(dds)),
                               normalization_factor = sizeFactors(dds),
                               row.names=NULL)
     write.table(size_factors,
@@ -320,110 +316,89 @@ rule differential_gene_expression:
      rownames(sampleDistMatrix)<-colnames(rld)
      colnames(sampleDistMatrix)<-colnames(rld)
      colours=colorRampPalette(rev(brewer.pal(9,"Blues")) )(255)
-     
+
      pdf("{output.dist_matrix}",width=15,height=10)
-     
+
      pheatmap(sampleDistMatrix,
 	 main="clustering of samples",
 	 clustering_distance_rows=sampleDists,
 	 clustering_distance_cols=sampleDists,
 	 col=colours,
 	 fontsize = 14)
-	 
+
      data<-plotPCA(rld,ntop=nrow(rld),returnData=TRUE)
      write.table(data,"{output.pca_design}",row.names=F, col.names=T, quote=F,sep="\t")
-     
+
      print(ggplot(data,aes(PC1,PC2,color=condition))+geom_point()+geom_text(aes(label=name),hjust=0,vjust=0))
 
-     
+
      dev.off()
 
      write(date(),file="{log}",append=T)
 
     """)
 
-# colData = colData[colnames(countsData),,drop=FALSE] : quel rôle ?
-
 ###############################################################################
 #
 # STEP 2: KMER COUNTS
 #         Compiple DEkupl counter and count k-mers on all the samples
 #
-
-# compte les k-mers de chaque échantillon
 rule jellyfish_count:
-  input: 
-    r1 = FASTQ_DIR  + "/{sample}.fastq.gz", 
-    # r2 = FASTQ_DIR  + "/{sample}_2.fastq.gz"
+  input:
+    r1 = FASTQ_DIR  + "/{sample}.fastq.gz", # /{sample}_1.fastq.gz
+    # r2 = FASTQ_DIR  + "/{sample}-2.fastq.gz"  # /{sample}_2.fastq.gz
   output: COUNTS_DIR + "/{sample}.jf"
-  log: 
+  log:
     exec_time = LOGS + "/{sample}_jellyfishRawCounts_exec_time.log"
   threads: 10
   run:
+    options = "-L 2 -m {config[kmer_length]} -s 10000 -t {threads} -o {output} -F 2"
+
+    shell("echo -e \"******\" >{log.exec_time}")
+    shell("echo -e \"start of rule jellyfish_count (raw counts) : $(date)\n\" >>{log.exec_time}")
+
     if LIB_TYPE == "rf":
-      shell(
-      """
-      
-      echo -e \"******\" >{log.exec_time}
-      echo -e \"start of rule jellyfish_count (raw counts) : $(date)\n\" >>{log.exec_time}
-      echo -e \"R1 is rev comp\n\" >>{log.exec_time}
-      
-      {JELLYFISH_COUNT} -L 2 -m {config[kmer_length]} -s 10000 -t {threads} -o {output} -F 2 <(zcat {input.r1})
-      
-      echo -e \"\nend of rule jellyfish_count : $(date)\n\" >>{log.exec_time} 
-      echo -e \"******\" >>{log.exec_time}
-      
-      """)
-
-# suppression d'un fichier fasta en paramètres
-
-# <(zcat {input.r1} | {REVCOMP}) < <(zcat {input.r2})
-
+      options += " <(zcat {input.r1} | {REVCOMP}) <(zcat {input.r2})"
+      shell("echo -e \"R1 is rev comp\n\" >>{log.exec_time}")
     elif LIB_TYPE == "fr":
-      shell("""
-      
-      echo -e \"******\" >{log.exec_time}
-      echo -e \"start of rule jellyfish_count (raw counts) : $(date)\n\" >>{log.exec_time}
-      echo -e \"R2 is rev comp\n\" >>{log.exec_time}
-      
-      {JELLYFISH_COUNT} -L 2 -m {config[kmer_length]} -s 10000 -t {threads} -o {output} -F 2 <(zcat {input.r1}) <(zcat {input.r2} | {REVCOMP})
-      
-      echo -e \"\nend of rule jellyfish_count : $(date)\n\" >>{log.exec_time} 
-      echo -e \"******\" >>{log.exec_time}
-      
-      """)
+      options += " <(zcat {input.r1}) <(zcat {input.r2} | {REVCOMP})"
+      shell("echo -e \"R2 is rev comp\n\" >>{log.exec_time}")
+    elif LIB_TYPE == "unstranded":
+      options += " -C <(zcat {input.r1}) " # <(zcat {input.r2})
     else:
       sys.exit('Unknown library type')
 
-# convertit le résultat de jellyfish_count en un fichier txt, tri les k-mers et compresse ce fichier txt
+    shell("{JELLYFISH_COUNT} " + options)
+    shell("echo -e \"\nend of rule jellyfish_count : $(date)\n\" >>{log.exec_time}")
+    shell("echo -e \"******\" >>{log.exec_time}")
+
 rule jellyfish_dump:
   input: COUNTS_DIR + "/{sample}.jf"
   output: COUNTS_DIR + "/{sample}.txt.gz"
   threads: 10
   resources: ram=3
-  log : 
+  log :
     exec_time = LOGS + "/{sample}_jellyfishDumpRawCounts_exec_time.log"
   shell: """
 
          echo -e \"******\" >{log.exec_time}
          echo -e \"start of rule jellyfish_dump : $(date)\n\" >>{log.exec_time}
 
-         {JELLYFISH_DUMP} -c {input} | sort -k 1 -S {resources.ram}G --parallel {threads}| pigz -p {threads} -c > {output}
+         {JELLYFISH_DUMP} -c {input} | sort -k 1 -S {resources.ram}G -T temporary/ --parallel {threads}| pigz -p {threads} -c > {output}
 
-         echo -e \"\nend of rule jellyfish_dump : $(date)\n\" >>{log.exec_time} 
+         echo -e \"\nend of rule jellyfish_dump : $(date)\n\" >>{log.exec_time}
          echo -e \"******\" >>{log.exec_time}
 
          """
 
-# fusionne tous les fichiers txt compressés correspondant aux résultats de jellyfish_dump pour chaque échantillon en un fichier tsv compressé
 rule join_counts:
-  input: 
+  input:
     fastq_files = expand("{counts_dir}/{sample}.txt.gz",counts_dir=COUNTS_DIR,sample=SAMPLE_NAMES),
     binary = JOIN_COUNTS
   params:
     sample_names = "\t".join(SAMPLE_NAMES)
   output: RAW_COUNTS
-  log : 
+  log :
     exec_time = LOGS + "/joinRawCounts_exec_time.log"
   run:
     shell("echo 'tag\t{params.sample_names}' | gzip -c > {output}")
@@ -431,12 +406,12 @@ rule join_counts:
 
            echo -e \"******\" >{log.exec_time}
            echo -e \"start of rule join_counts : $(date)\n\" >>{log.exec_time}
-           
+
            {JOIN_COUNTS} -r {config[dekupl_counter][min_recurrence]} \
           -a {config[dekupl_counter][min_recurrence_abundance]} \
           {input.fastq_files} | gzip -c >> {output}
 
-          echo -e \"\nend of rule dekupl_counter : $(date)\n\" >>{log.exec_time} 
+          echo -e \"\nend of rule dekupl_counter : $(date)\n\" >>{log.exec_time}
           echo -e \"******\" >>{log.exec_time}
 
           """)
@@ -453,13 +428,16 @@ rule gencode_count:
   input: GENCODE_FASTA
   output: temp(GENCODE_FASTA + ".jf")
   threads: MAX_CPU
-  shell: """{JELLYFISH_COUNT} -m {config[kmer_length]} \
-            -s 10000 -t {threads} -o {output} <(zcat {input})"""
+  run:
+    options = "-m {config[kmer_length]} -s 10000 -t {threads} -o {output}"
+    if LIB_TYPE == "unstranded":
+      options += " -C"
+    shell("{JELLYFISH_COUNT} " + options + " <(zcat {input})")
 
 rule gencode_dump:
   input: GENCODE_FASTA + ".jf"
   output: GENCODE_COUNTS
-  log : 
+  log :
     exec_time = LOGS + "/jellyfishDumpGencodeCounts_exec_time.log"
   threads: 10
   resources: ram=4
@@ -469,13 +447,12 @@ rule gencode_dump:
          echo -e \"start of gencode_dump : $(date)\n\" >>{log.exec_time}
 
 
-        {JELLYFISH_DUMP} -c {input} | sort -k 1 -S {resources.ram}G --parallel {threads} -T "./temporary" | pigz -p {threads} -c > {output}
+        {JELLYFISH_DUMP} -c {input} | sort -k 1 -S {resources.ram}G --parallel {threads}| pigz -p {threads} -c > {output}
 
-        echo -e \"\nend of rule gencode_dump : $(date)\n\" >>{log.exec_time} 
+        echo -e \"\nend of rule gencode_dump : $(date)\n\" >>{log.exec_time}
         echo -e \"******\" >>{log.exec_time}
 
         """
-# ajout de l'option -T à 'sort', le répertoire par défaut /tmp n'étant pas suffisant pour exécuter l'intégralité du tri.
 
 # 3.3 Filter counter k-mer that are present in the gencode set
 rule filter_gencode_counts:
@@ -483,18 +460,16 @@ rule filter_gencode_counts:
     counts = RAW_COUNTS,
     gencode_counts = GENCODE_COUNTS
   output: NO_GENCODE_COUNTS
-  log: 
+  log:
     exec_time = LOGS + "/filter_gencode_counts_exec_time.log"
   shell: """
-
-
          echo -e \"******\" >{log.exec_time}
          echo -e \"start of filter_gencode_counts : $(date)\n\" >>{log.exec_time}
 
          {DIFF_FILTER} {input.gencode_counts} {input.counts} | gzip -c > {output}
 
 
-         echo -e \"\nend of filter_gencode_counts : $(date)\n\" >>{log.exec_time} 
+         echo -e \"\nend of filter_gencode_counts : $(date)\n\" >>{log.exec_time}
          echo -e \"******\" >>{log.exec_time}
 
          """
@@ -506,12 +481,12 @@ rule filter_gencode_counts:
 #         differentially expressed.
 #
 rule test_diff_counts:
-  input: 
-    counts = NO_GENCODE_COUNTS,
+  input:
+    counts = RAW_COUNTS, # ici c'est NO_GENCODE_COUNTS par défaut
     sample_conditions = SAMPLE_CONDITIONS_FULL,
     binary = TTEST_FILTER
   output: DIFF_COUNTS
-  log: 
+  log:
     exec_time = LOGS + "/test_diff_counts_exec_time.log"
   shell:  """
 
@@ -524,7 +499,7 @@ rule test_diff_counts:
 	  {input.counts} {input.sample_conditions} \
 	  {CONDITION_A} {CONDITION_B} | gzip -c > {output}
 
-	  echo -e \"\nend of test_diff_counts : $(date)\n\" >>{log.exec_time} 
+	  echo -e \"\nend of test_diff_counts : $(date)\n\" >>{log.exec_time}
 	  echo -e \"******\" >>{log.exec_time}
 
           """
@@ -535,20 +510,19 @@ rule merge_tags:
     binary = MERGE_TAGS
   output:
     MERGED_DIFF_COUNTS
-  log: 
+  log:
     exec_time = LOGS + "/merge_tags_exec_time.log"
-  shell: """
+  run:
+    options = "-k {config[kmer_length]}"
 
-          echo -e \"******\" >{log.exec_time}
-          echo -e \"start of merge_tags : $(date)\n\" >>{log.exec_time}
+    if LIB_TYPE == "unstranded":
+      options += " -n"
 
-          {MERGE_TAGS} -k {config[kmer_length]} {input.counts} | gzip -c > {output}
-
-          echo -e \"\nend of merge_tags : $(date)\n\" >>{log.exec_time} 
-          echo -e \"******\" >>{log.exec_time}
-
-
-         """
+    shell("echo -e \"******\" >{log.exec_time}")
+    shell("echo -e \"start of merge_tags : $(date)\n\" >>{log.exec_time}")
+    shell("{MERGE_TAGS} " + options + " {input.counts} | gzip -c > {output}")
+    shell("echo -e \"\nend of merge_tags : $(date)\n\" >>{log.exec_time}")
+    shell("echo -e \"******\" >>{log.exec_time}")
 
 ###############################################################################
 #
@@ -565,12 +539,12 @@ rule merge_tags:
 #  output: ASSEMBLIES_BAM
 #  threads: 10
 #  shell: """
-#  
+#
 #  	gsnap -D {GSNAP_INDEX_DIR} -d {GSNAP_INDEX_NAME} \
 #            --gunzip -t {threads} -A sam -B 2 -N 1 {input} \
 #            | samtools view -bS - \
 #            | samtools sort - -o {output} \
 #            && samtools index {output}
-#            
-#            
+#
+#
 #         """
