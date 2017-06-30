@@ -1,6 +1,5 @@
 import sys
 import matplotlib.pyplot as plt
-from math import sqrt
 from subprocess import call
 
 
@@ -62,15 +61,16 @@ def total_kmers(n, countsFile):
     """
     i = 0
     countsFile = open(countsFile, 'r')
-    resultsFile = open("total_kmers.txt", 'a')
     line = countsFile.readline()  # skip the first line
     splitLine = line.split('\t')
     sampleName = splitLine[n]
+    print("Counting the total of k-mers for " + sampleName)
     for line in countsFile:
         splitLine = line.split('\t')
         i += int(splitLine[n])
     countsFile.close()
-    resultsFile.write(sampleName + ' : ' + str(i) + '\n')
+    resultsFile = open("total_kmers.txt", 'a')
+    resultsFile.write(sampleName + '\t' + str(i) + '\n')
     resultsFile.close()
 
 
@@ -88,7 +88,6 @@ def total_kmers_for_one_sample(sampleName, countsFile):
     """
     i, j = 0, 0
     countsFile = open(countsFile, 'r')
-    resultsFile = open("total_kmers.txt", 'a')
     line = countsFile.readline()
     splitLine = line.split('\t')
     while (j < len(splitLine) - 1):
@@ -99,7 +98,8 @@ def total_kmers_for_one_sample(sampleName, countsFile):
         splitLine = line.split('\t')
         i += int(splitLine[j])
     countsFile.close()
-    resultsFile.write(sampleName + ' : ' + str(i) + '\n')
+    resultsFile = open("total_kmers.txt", 'a')
+    resultsFile.write(sampleName + '\t' + str(i) + '\n')
     resultsFile.close()
 
 
@@ -125,26 +125,45 @@ def total_kmers_histogram(totalKmerFile):
     plt.savefig('total_kmers.png')
 
 
-def total_kmers_average_and_standard_deviation():
+def total_kmers_average():
     """Give the average of the total k-mers of all the samples in the file 'total_kmers.txt'."""
     totals_list = []
-    variances_list = []
     nbLines = 0
     totalKmerFile = open("total_kmers.txt", 'r')
     resultsFile = open("total_kmers.txt", 'a')
     for line in totalKmerFile:
         splitLine = line.split()
-        totals_list += [int(splitLine[2])]
+        totals_list += [int(splitLine[1])]
         nbLines += 1
     totalKmerFile.close()
     average = sum(totals_list) // nbLines
-    for element in totals_list:
-        variances_list += [(element - average)**2]
-    resultsFile.write("Average : " + str(average))
-    resultsFile.write("\nStandard-deviation : ")
-    resultsFile.write(str(sqrt(sum(variances_list)//nbLines)) + '\n')
+    resultsFile.write("Average\t" + str(average))
     resultsFile.close()
 
+
+def get_condition(phenotype, sample):
+    cpt = 0
+    phenotypeFile = open(phenotype, 'r')
+    for line in phenotypeFile:
+        splitLine = line.split()
+        if (splitLine[0] == sample[:-5]):
+            print(int(splitLine[4]))
+            cpt = 1
+            if (cpt != 1):
+                print(3)
+
+
+def genomecov_mean(mergedGenomecovFile, finalFileName, condition):
+    finalGenomecovFile = open(finalFileName, 'a')
+    with open(mergedGenomecovFile) as mgf:
+        for line in mgf:
+            splitLine = line.split('\t')
+            genomecovSum = 0
+            for i in range(2, len(splitLine)):
+                genomecovSum += int(splitLine[i])
+            genomecovMean = genomecovSum // (len(splitLine) -2)
+            finalGenomecovFile.write(splitLine[0] + condition + '\t' + splitLine[1] + '\t' + str(genomecovMean) + '\n')
+    finalGenomecovFile.close()
 
 def add_conditions(phenotype, textFile):
     """
@@ -327,6 +346,22 @@ def ratios(contig, phenotype):
         print([round(((zHealthy/len(splitCounts)) * 100), 2), round(((sHealthy/len(splitCounts)) * 100), 2), round(((zSick/len(splitCounts)) * 100), 2), round(((sSick/len(splitCounts)) * 100), 2)])
 
 
+def contig_or_not(contig):
+    resultsList = []
+    dr = int(contig)
+    with open("cTetA.tsv", 'r') as contigFile:
+        headerLine = contigFile.readline()
+        splitHeader = headerLine.split('\t')
+        countsLine = contigFile.readline()
+        splitCounts = countsLine.split('\t')
+        for i in range(6, len(splitHeader) - 1):
+            if(dr == 0 and round(float(splitCounts[i])) == 0):
+                resultsList += [splitHeader[i]]
+            if(dr == 1 and round(float(splitCounts[i])) != 0):
+                resultsList += [splitHeader[i]]
+    print(resultsList)
+
+
 def below_nb_kmers(nb_kmers):
     nbKmers = int(nb_kmers)
     with open("total_kmers_with_conditions.txt", 'r') as totalKmersFile:
@@ -337,10 +372,11 @@ def below_nb_kmers(nb_kmers):
 
 
 def main():
-    # for i in range(1, 339):
-    #     total_kmers(i, sys.argv[1])
-    if (sys.argv[1] == "total-kmers-average"):
-        total_kmers_average_and_standard_deviation()
+    if (sys.argv[1] == "total-kmers"):
+        for i in range(246, 340):
+            total_kmers(i, sys.argv[2])
+    elif (sys.argv[1] == "total-kmers-average"):
+        total_kmers_average()
     elif (sys.argv[1] == "add-samples-to-config-file"):
         add_samples_to_config_file(sys.argv[2], sys.argv[3])
     elif (sys.argv[1] == "move-fastq-files"):
@@ -368,6 +404,12 @@ def main():
         ratios(sys.argv[2], sys.argv[3])
     elif (sys.argv[1] == "below-nb-kmers"):
         below_nb_kmers(sys.argv[2])
+    elif (sys.argv[1] == "get-condition"):
+        get_condition(sys.argv[2], sys.argv[3])
+    elif (sys.argv[1] == "genomecov-mean"):
+        genomecov_mean(sys.argv[2], sys.argv[3], sys.argv[4])
+    elif (sys.argv[1] == "contig-or-not"):
+        contig_or_not(sys.argv[2])
     else:
         print("This function doesn't exist.")
 

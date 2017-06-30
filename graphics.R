@@ -18,7 +18,7 @@ library(ggplot2)
 
 plot <- ggplot(data=sample, aes(x=locus, y=depth, colour=chr))
 plot <- plot + geom_point(size=2)
-plot <- plot + ggtitle("Profondeur de couverture par position - ChrY ; individu 12227")
+plot <- plot + ggtitle("Profondeur de couverture par position - ChrY")
 plot <- plot + stat_smooth(colour="blue")
 plot <- plot + ylim(0, 60)
 

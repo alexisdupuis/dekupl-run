@@ -2,9 +2,11 @@
 
 # Convert bam files into fastq files and compress them
 
-if [ $# -ne 1 ]
+if [ $# -ne 2 ]
 then
-    echo "This script needs one argument which is the directory where the bam files are."
+    echo "This script needs two arguments :"
+    echo "The first one must be the directory where the bam files are."
+    echo "The second one must be the path of the directory for the fastq files."
     exit 1
 fi
 
@@ -15,20 +17,20 @@ then
     exit 1
 fi
 
-# Checks if the directory chr21_compressed_fastq/ already exists, otherwise creates it.
+# Checks if the second argument correspond to a directory which already exists, otherwise creates it.
 
-ls chr21_compressed_fastq > /dev/null 2>&1
+ls $2 > /dev/null 2>&1
 if [ $? -ne 0 ]
 then
-    mkdir chr21_compressed_fastq
+    mkdir $2
 fi
 
 listBams=`ls $1/*.bam`
 
-for i in $listBams
+for bam in $listBams
 do
-    name=`basename $i '.bam'`
-    fastqFile=chr21_compressed_fastq/$name.fastq.gz
+    name=`basename $bam '.bam'`
+    fastqFile=$2/$name.fastq.gz
     ls $fastqFile > /dev/null 2>&1
     # Skip the creation of the file if it already exists.
     if [ $? -eq 0 ]
@@ -36,7 +38,7 @@ do
         continue
     fi
     echo "Converting $name."
-    samtools bam2fq $i | gzip > $fastqFile
+    samtools bam2fq $bam | gzip > $fastqFile
 done
 
 exit 0
