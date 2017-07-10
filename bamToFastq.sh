@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# Convert bam files into fastq files and compress them
+# Convert bam files into fastq files and compress them.
 
 if [ $# -ne 2 ]
 then

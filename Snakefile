@@ -146,7 +146,6 @@ rule gsnap_index:
 #
 # Create a tabulated file with the sample name and conditions
 rule sample_conditions:
-  input: KALLISTO_INDEX
   output: SAMPLE_CONDITIONS
   run:
     with open(output[0], "w") as f:

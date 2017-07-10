@@ -3,9 +3,13 @@
 
 if [ $# -ne 1 ]
 then
-    echo "This script needs one argument, which is condition if you want to order the samples by their condition, or contig if you want to order them by their contig expression."
+    echo "This script needs one argument, which is 'condition' if you want to order the samples by their condition,"
+    echo "or 'contig' if you want to order them by their contig expression."
     exit 1
 fi
+
+# Creates a file for each condition, then copies the first two columns of one of
+# the files since those columns are common to all the files.
 
 touch c1_merged_genomecov.txt
 cat ./chrY-genomecov/002E_chrY-merged-genomecov.txt | awk 'BEGIN {OFS="\t"} ; {print $1, $2}' > c1_merged_genomecov.txt
@@ -16,6 +20,7 @@ cat ./chrY-genomecov/002E_chrY-merged-genomecov.txt | awk 'BEGIN {OFS="\t"} ; {p
 if [ $1 = "condition" ]
 then
     listFiles=`ls ./chrY-genomecov/*-merged-*`
+    echo "Copying coverage values from each samples."
     for file in $listFiles
     do
         name=`basename $file '-merged-genomecov.txt'`
@@ -37,6 +42,7 @@ then
 elif [ $1 = "contig" ]
 then
     listNames=$(python3 total_kmers.py contig-or-not 0)
+    echo "Copying coverage values from each samples."
     for name in $listNames
     do
         filename=`echo $name | tr -d "," | tr -d "'" | tr -d "[" | tr -d "]"`
@@ -69,6 +75,8 @@ mv temp.txt c1_merged_genomecov.txt
 head -n -10 c2_merged_genomecov.txt > temp.txt
 mv temp.txt c2_merged_genomecov.txt
 
+echo "Computing the mean for each position and each condition."
+
 if [ $1 = "condition" ]
 then
     python3 total_kmers.py genomecov-mean c1_merged_genomecov.txt c1_final_genomecov.txt -healthy
@@ -81,15 +89,16 @@ fi
 cat c1_final_genomecov.txt > file_for_R.txt
 cat c2_final_genomecov.txt >> file_for_R.txt
 
+echo "Drawing the graph of coverage per position."
+
 if [ $1 = "condition" ]
 then
-    Rscript two_conditions_graphic.R file_for_R.txt conditions_genomecov.jpg
+    Rscript two_curves.R file_for_R.txt conditions_genomecov.jpg
 else
-    Rscript two_conditions_graphic.R file_for_R.txt contig_or_not_contig.jpg
+    Rscript two_curves.R file_for_R.txt contig_or_not_contig.jpg
 fi
 
 rm c1*
 rm c2*
-rm file_for_R.txt
 
 exit 0

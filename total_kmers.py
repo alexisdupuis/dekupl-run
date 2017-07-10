@@ -1,19 +1,5 @@
 import sys
-import matplotlib.pyplot as plt
-from subprocess import call
-
-
-def move_fastq_files(phenotype):
-    i = 0
-    phenotypeFile = open(phenotype, 'r')
-    phenotypeFile.readline()  # skip the first line
-    for line in phenotypeFile:
-        splitLine = line.split()
-        sampleName = splitLine[0] + "_chrY.fastq.gz"
-        call(["mv", "./data/" + sampleName, "../chrY_compressed-fastq/"])
-        i += 1
-        if (i >= 190):
-            break
+from math import sqrt
 
 
 def add_samples_to_config_file(n, phenotype):
@@ -103,28 +89,6 @@ def total_kmers_for_one_sample(sampleName, countsFile):
     resultsFile.close()
 
 
-def total_kmers_histogram(totalKmerFile):
-    """
-    Build a histogram with the file containing the total of k-mers for each samples.
-
-    :param totalKmerFile: the name of the file
-    :type totalKmerFile: str
-    """
-    totalKmerList = []
-    with open(totalKmerFile, 'r') as tkf:
-        for line in tkf:
-            splitLine = line.split()
-            if (splitLine[0] == "Average"):
-                break
-            totalKmerList += [int(splitLine[2])]
-    plt.hist(totalKmerList, bins=50, color='green', edgecolor='blue')
-    plt.axis([200000000, 1200000000, 0, 30])
-    plt.xlabel('Nombre total de k-mers')
-    plt.ylabel("Nombre d'individus")
-    plt.title("Répartition des individus selon le nombre total de k-mers comptés.")
-    plt.savefig('total_kmers.png')
-
-
 def total_kmers_average():
     """Give the average of the total k-mers of all the samples in the file 'total_kmers.txt'."""
     totals_list = []
@@ -142,6 +106,14 @@ def total_kmers_average():
 
 
 def get_condition(phenotype, sample):
+    """
+    Get the condition associated to the sample.
+
+    :param phentoype: the name of a file containing informations about the condition of each samples of a population
+    :param sample: a sample
+    :type phenotype: str
+    :type sample: str
+    """
     cpt = 0
     phenotypeFile = open(phenotype, 'r')
     for line in phenotypeFile:
@@ -153,16 +125,30 @@ def get_condition(phenotype, sample):
                 print(3)
 
 
-def genomecov_mean(mergedGenomecovFile, finalFileName, condition):
+def genomecov_mean_and_sd(mergedGenomecovFile, finalFileName, condition):
+    """
+    Compute the mean and the standard deviation for each line of a file containing the coverage per position for several samples.
+
+    :param mergedGenomecovFile: the name of a file containing the coverage for each samples
+    :param finalFileName: the name of the results file
+    :param condition: a suffix used to distinguish two different conditions
+    :type mergedGenomecovFile: str
+    :type finalFileName: str
+    :type condition: str
+    """
     finalGenomecovFile = open(finalFileName, 'a')
     with open(mergedGenomecovFile) as mgf:
         for line in mgf:
             splitLine = line.split('\t')
             genomecovSum = 0
+            individualCoverage = []
             for i in range(2, len(splitLine)):
                 genomecovSum += int(splitLine[i])
+                individualCoverage += [int(splitLine[i])]
             genomecovMean = genomecovSum // (len(splitLine) -2)
-            finalGenomecovFile.write(splitLine[0] + condition + '\t' + splitLine[1] + '\t' + str(genomecovMean) + '\n')
+            genomecovVariance = sum([(x - genomecovMean)**2 for x in individualCoverage]) // (len(splitLine) - 2)
+            genomecovSD = sqrt(genomecovVariance)
+            finalGenomecovFile.write(splitLine[0] + condition + '\t' + splitLine[1] + '\t' + str(genomecovMean) + '\t' + str(genomecovSD) +'\n')
     finalGenomecovFile.close()
 
 def add_conditions(phenotype, textFile):
@@ -214,9 +200,9 @@ def add_normalization_factor(sampleConditionFile):
     for line in totalKmersFile:
         splitLine = line.split()
         if (splitLine[0] == "Average"):
-            average = int(splitLine[2])
+            average = int(splitLine[1])
             break
-        totalKmersList += [int(splitLine[2])]
+        totalKmersList += [int(splitLine[1])]
     for elt in totalKmersList:
         nfList += [average / elt]
     for line in sampleConditionFile:
@@ -227,189 +213,39 @@ def add_normalization_factor(sampleConditionFile):
     totalKmersFile.close()
 
 
-def select_contigs(threshold, pvalue, contigFile):
-    """
-    Select the contigs in the file "contigFile" according to the two other parameters : threshold is the minimum length of the contig, pvalue the maximum pvalue associated.
-
-    :param threshold: the minimum length
-    :param pvalue: the maximum pvalue
-    :param contigFile: the file containing the contigFile
-    :type threshold: int
-    :type pvalue: float
-    :type contigFile: str
-    """
-    i = 1
-    resultsFile = open("contigs.fasta", 'w')
-    with open(contigFile, 'r') as ctgFile:
-        ctgFile.readline()  # skip the header
-        for line in ctgFile:
-            splitLine = line.split('\t')
-            if (len(splitLine[1]) > int(threshold) and (int(splitLine[3] < pvalue))):
-                resultsFile.write(">contig " + str(i) + " length=" + str(len(splitLine[1])) + " pvalue=" + splitLine[3] + " nb_kmers=" + str(splitLine[0]) + '\n')
-                resultsFile.write(splitLine[1] + '\n')
-                i += 1
-    resultsFile.close()
-
-
-def cut_contig(contig):
-    """
-    Cut the contig in k-mers of 31 nucleotids.
-
-    :param contig: the contig to cut
-    :type contig: str
-    """
-    kmerList = []
-    for i in range(0, len(contig)-30):
-        kmerList += [contig[i:i+31]]
-    return kmerList
-
-
-def revcomp(kmer):
-    """
-    Give the reverse complement of the kmer.
-
-    :param kmer: the kmer to reverse complement
-    :type kmer: str
-    """
-    length = len(kmer) - 1
-    revcompResult = list(kmer)
-    for i in range(len(kmer)):
-        revcompResult[length - i] = revcomp_letter(kmer[i])
-    return "".join(revcompResult)
-
-
-def revcomp_letter(nucleotid):
-    """
-    Give the complement of the nucleotid.
-
-    :param nucleotid: a nucleotid
-    :type letter: str
-    """
-    if (nucleotid == 'A'):
-        return 'T'
-    elif (nucleotid == 'T'):
-        return 'A'
-    elif (nucleotid == 'C'):
-        return 'G'
-    elif (nucleotid == 'G'):
-        return 'C'
-    else:
-        return 'N'
-
-
-def kmer_counts(kmer, countsFile, filename, cpt):
-    revcompResult = revcomp(kmer)
-    resultsFile = open(filename, 'a')
-    with open(countsFile, 'r') as cFile:
-        headerLine = cFile.readline()
-        if (cpt == 0):
-            resultsFile.write("orientation\t" + headerLine)
-        for line in cFile:
-            splitLine = line.split('\t')
-            if (kmer == splitLine[0]):
-                resultsFile.write("forward\t"+ line)
-                # break
-            if (revcompResult == splitLine[0]):
-                resultsFile.write("reverse\t" + line)
-                # break
-            else:
-                continue
-
-
-def ratios(contig, phenotype):
-    zHealthy, zSick, sHealthy, sSick = 0, 0, 0, 0
-    i = 6 # skip the first columns as they are not used in this function
-    with open(contig, 'r') as ctFile:
-        headerLine = ctFile.readline()
-        splitHeader = headerLine.split('\t')
-        countsLine = ctFile.readline()
-        splitCounts = countsLine.split('\t')
-        while (i < len(splitCounts)):
-            sample = [splitHeader[i], splitCounts[i]]
-            with open(phenotype, 'r') as phenotypeFile:
-                for line in phenotypeFile:
-                    splitPhenotype = line.split()
-                    if (splitPhenotype[0] == sample[0][:-5]):
-                        break
-                if (int(splitPhenotype[4]) == 1):
-                    if (float(sample[1]) == 0):
-                        zHealthy += 1
-                    else:
-                        sHealthy += 1
-                else:
-                    if (float(sample[1]) == 0):
-                        zSick += 1
-                    else:
-                        sSick += 1
-            i += 1
-        print([zHealthy, sHealthy, zSick, sSick])
-        print([round(((zHealthy/len(splitCounts)) * 100), 2), round(((sHealthy/len(splitCounts)) * 100), 2), round(((zSick/len(splitCounts)) * 100), 2), round(((sSick/len(splitCounts)) * 100), 2)])
-
-
-def contig_or_not(contig):
-    resultsList = []
-    dr = int(contig)
-    with open("cTetA.tsv", 'r') as contigFile:
-        headerLine = contigFile.readline()
-        splitHeader = headerLine.split('\t')
-        countsLine = contigFile.readline()
-        splitCounts = countsLine.split('\t')
-        for i in range(6, len(splitHeader) - 1):
-            if(dr == 0 and round(float(splitCounts[i])) == 0):
-                resultsList += [splitHeader[i]]
-            if(dr == 1 and round(float(splitCounts[i])) != 0):
-                resultsList += [splitHeader[i]]
-    print(resultsList)
-
-
 def below_nb_kmers(nb_kmers):
-    nbKmers = int(nb_kmers)
+    """
+    Select all the samples which have a total of k-mers below the threshold.
+    
+    :param nb_kmers: the threshold
+    :type nb_kmers: int
+    """
     with open("total_kmers_with_conditions.txt", 'r') as totalKmersFile:
         for line in totalKmersFile:
             splitLine = line.split()
-            if (int(splitLine[2]) < nbKmers and splitLine[3] == "1"):
+            if (int(splitLine[2]) < nb_kmers and splitLine[3] == "1"):
                 print(splitLine[3])
 
 
 def main():
+    """Allow to use this file like an executable."""
     if (sys.argv[1] == "total-kmers"):
-        for i in range(246, 340):
+        for i in range(0, 340):
             total_kmers(i, sys.argv[2])
     elif (sys.argv[1] == "total-kmers-average"):
         total_kmers_average()
     elif (sys.argv[1] == "add-samples-to-config-file"):
         add_samples_to_config_file(sys.argv[2], sys.argv[3])
-    elif (sys.argv[1] == "move-fastq-files"):
-        move_fastq_files(sys.argv[2])
-    # significantly_low_total_kmers(sys.argv[1])
     elif (sys.argv[1] == "add-conditions"):
         add_conditions(sys.argv[2], sys.argv[3])
     elif(sys.argv[1] == "add-normalization-factor"):
         add_normalization_factor(sys.argv[2])
-    # total_kmers_histogram(sys.argv[1])
-    elif (sys.argv[1] == "select-contigs"):
-        select_contigs(sys.argv[2], sys.argv[3], sys.argv[4])
-    elif (sys.argv[1] == "total-kmers-for-one-sample"):
-        total_kmers_for_one_sample(sys.argv[2], sys.argv[3])
-    elif (sys.argv[1] == "cut-contig"):
-        kmerList = cut_contig(sys.argv[2])
-        cpt = 0
-        for i in range(len(kmerList)):
-            print(kmerList[i])
-            kmer_counts(kmerList[i], sys.argv[3], sys.argv[4], cpt)
-            cpt += 1
-    elif (sys.argv[1] == "kmer-counts"):
-        kmer_counts(sys.argv[2], sys.argv[3])
-    elif (sys.argv[1] == "ratios"):
-        ratios(sys.argv[2], sys.argv[3])
-    elif (sys.argv[1] == "below-nb-kmers"):
-        below_nb_kmers(sys.argv[2])
     elif (sys.argv[1] == "get-condition"):
         get_condition(sys.argv[2], sys.argv[3])
-    elif (sys.argv[1] == "genomecov-mean"):
-        genomecov_mean(sys.argv[2], sys.argv[3], sys.argv[4])
-    elif (sys.argv[1] == "contig-or-not"):
-        contig_or_not(sys.argv[2])
+    elif (sys.argv[1] == "genomecov-mean-and-sd"):
+        genomecov_mean_and_sd(sys.argv[2], sys.argv[3], sys.argv[4])
+    elif (sys.argv[1] == "below-nb-kmers"):
+        below_nb_kmers(int(sys.argv[2]))
     else:
         print("This function doesn't exist.")
 

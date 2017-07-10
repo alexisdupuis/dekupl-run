@@ -1,21 +1,25 @@
-# Ignore the gzip archives, the object files
+# Ignore the gzip archives, the object files, the text files, the png files
 *.gz
 *.o
+*.txt
+*.tsv
+*.csv
+*.png
+*.jpg
+*.fasta
 
-# Ignore the results of dekupl-run and the temporary directory used 
+# Ignore the results of dekupl-run and the temporary directory used
 # during the execution of dekupl-run
 DEkupl_result/
 temporary/
 
-# Ignore the data directory
+# Ignore some directories
 data/
-
-# Ignore the bin directory
 bin/
-
-# Ignores the share directory
 share/
-
-
-
-raw_pvals.txt
+wgsim/
+graphiques/
+chrY*/
+test_samples/
+bwa*/
+/.snakemake/
